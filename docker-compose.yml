@@ -9,7 +9,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - movie_postgres_data:/var/lib/postgresql/data
     networks:
       - movie_network
     healthcheck:
@@ -50,7 +50,7 @@ services:
       - movie_network
 
 volumes:
-  postgres_data:
+  movie_postgres_data:
 
 networks:
   movie_network:

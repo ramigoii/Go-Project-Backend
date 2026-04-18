@@ -1,7 +1,6 @@
 package config
 
 import (
-	"MovieDatabase/models"
 	"log"
 	"time"
 
@@ -31,11 +30,6 @@ func ConnectDatabase() {
 
 	if err != nil {
 		log.Fatal("❌ Failed to connect:", err)
-	}
-
-	err = database.AutoMigrate(&models.Movie{}, &models.User{}, &models.Booking{})
-	if err != nil {
-		log.Fatal("❌ Migration failed:", err)
 	}
 
 	DB = database
