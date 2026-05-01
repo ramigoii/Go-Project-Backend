@@ -1,12 +1,18 @@
 package middleware
 
 import (
+	"MovieDatabase/services"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
+
+var authClient *services.AuthClient
+
+func InitAuthMiddleware() {
+	authClient = services.NewAuthClient()
+}
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -25,25 +31,18 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		tokenString := bearerToken[1]
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return []byte("your_jwt_secret"), nil // Replace with your secret key
-		})
 
-		if err != nil || !token.Valid {
+		// Валидация токена через auth service
+		validation, err := authClient.ValidateToken(tokenString)
+		if err != nil || !validation.Valid {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			c.Abort()
 			return
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
-			c.Abort()
-			return
-		}
-
-		// Add user ID to context
-		c.Set("user_id", claims["user_id"])
+		// Добавляем user_id в контекст
+		c.Set("user_id", validation.UserID)
+		c.Set("username", validation.Username)
 		c.Next()
 	}
 }
