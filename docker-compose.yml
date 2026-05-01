@@ -1,5 +1,44 @@
 services:
-  postgres:
+  auth-db:
+    image: postgres:15-alpine
+    container_name: auth_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: auth_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - auth_postgres_data:/var/lib/postgresql/data
+    networks:
+      - movie_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build:
+      context: ../auth-service
+      dockerfile: Dockerfile
+    container_name: auth_service
+    ports:
+      - "8081:8081"
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: auth-db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: auth_db
+      INTERNAL_API_KEY: "your-internal-secret-key"
+    networks:
+      - movie_network
+
+  movie-db:
     image: postgres:15-alpine
     container_name: movie_db_postgres
     environment:
@@ -18,6 +57,30 @@ services:
       timeout: 5s
       retries: 5
 
+  movie-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: movie_db_api
+    ports:
+      - "8080:8080"
+    depends_on:
+      movie-db:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    environment:
+      DB_HOST: movie-db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: movie_db
+      DB_PORT: "5432"
+      PORT: "8080"
+      AUTH_SERVICE_URL: "http://auth-service:8081"
+      INTERNAL_API_KEY: "your-internal-secret-key"
+    networks:
+      - movie_network
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: movie_db_pgadmin
@@ -27,30 +90,14 @@ services:
     ports:
       - "5050:80"
     depends_on:
-      - postgres
-    networks:
-      - movie_network
-
-  app:
-    build: .
-    container_name: movie_db_api
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DB_HOST: postgres
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: movie_db
-      DB_PORT: "5432"
-      PORT: "8080"
+      - movie-db
+      - auth-db
     networks:
       - movie_network
 
 volumes:
   movie_postgres_data:
+  auth_postgres_data:
 
 networks:
   movie_network:

@@ -1,15 +1,17 @@
 package handlers
 
 import (
-	"MovieDatabase/config"
-	"MovieDatabase/models"
+	"MovieDatabase/services"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
 )
+
+var authClient *services.AuthClient
+
+func InitAuthHandler() {
+	authClient = services.NewAuthClient()
+}
 
 func Register(c *gin.Context) {
 	var input struct {
@@ -23,31 +25,15 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Create new user
-	user := models.User{
-		Username: input.Username,
-		Email:    input.Email,
-		Password: input.Password,
-	}
-
-	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	userID, err := authClient.RegisterUser(input.Username, input.Email, input.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
-		return
-	}
-	user.Password = string(hashedPassword)
-
-	// Create user
-	result := config.DB.Create(&user)
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"id":       user.ID,
-		"username": user.Username,
+		"id":       userID,
+		"username": input.Username,
 		"message":  "User registered successfully",
 	})
 }
@@ -63,36 +49,15 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	var user models.User
-	if err := config.DB.Where("username = ?", loginData.Username).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
-		return
-	}
-
-	// Compare the stored hashed password with the input password
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(loginData.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
-		return
-	}
-
-	// Generate JWT token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id":  user.ID,
-		"username": user.Username,
-		"exp":      time.Now().Add(time.Hour * 24).Unix(), // Token expires in 24 hours
-	})
-
-	tokenString, err := token.SignedString([]byte("your_jwt_secret"))
+	token, userID, err := authClient.LoginUser(loginData.Username, loginData.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"token": tokenString,
-		"user": gin.H{
-			"id":       user.ID,
-			"username": user.Username,
-		},
+		"token":    token,
+		"user_id":  userID,
+		"username": loginData.Username,
 	})
 }
