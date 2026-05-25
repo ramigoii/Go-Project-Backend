@@ -8,4 +8,5 @@ type Movie struct {
 	Title       string    `gorm:"not null;size:255" json:"title" binding:"required"`
 	Description string    `gorm:"type:text" json:"description"`
 	Bookings    []Booking `json:"bookings,omitempty"`
+	Reviews     []Review  `json:"reviews,omitempty"`
 }

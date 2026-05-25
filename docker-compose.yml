@@ -80,6 +80,22 @@ services:
       INTERNAL_API_KEY: "your-internal-secret-key"
     networks:
       - movie_network
+  movie-test-db:
+    image: postgres:15-alpine
+    container_name: movie_test_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: movie_db_test
+    ports:
+      - "5434:5432"
+    networks:
+      - movie_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   pgadmin:
     image: dpage/pgadmin4:latest

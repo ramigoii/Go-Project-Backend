@@ -14,6 +14,5 @@ type Booking struct {
 	SeatNumber string    `gorm:"not null;size:10" json:"seat_number" binding:"required"`
 	ShowTime   time.Time `gorm:"not null" json:"show_time" binding:"required"`
 	TotalPrice float64   `gorm:"default:0" json:"total_price"`
-	User       User      `gorm:"foreignKey:UserID" json:"user,omitempty"`
 	Movie      Movie     `gorm:"foreignKey:MovieID" json:"movie,omitempty"`
 }

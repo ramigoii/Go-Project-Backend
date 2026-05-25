@@ -21,7 +21,7 @@ func GetAllMovies(c *gin.Context) {
 	query := config.DB
 
 	if title != "" {
-		query = query.Where("title ILIKE ?", "%"+title+"%")
+		query = query.Where("LOWER(title) LIKE LOWER(?)", "%"+title+"%")
 	}
 
 	if err := query.
@@ -139,7 +139,7 @@ func SearchMovies(c *gin.Context) {
 
 	var movies []models.Movie
 	if err := config.DB.
-		Where("title ILIKE ?", "%"+title+"%").
+		Where("LOWER(title) LIKE LOWER(?)", "%"+title+"%").
 		Find(&movies).Error; err != nil {
 
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

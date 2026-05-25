@@ -35,9 +35,12 @@ func CreateBooking(c *gin.Context) {
 		return
 	}
 
+	// Check seat not already taken for this showtime
 	var existingBooking models.Booking
-	if err := config.DB.Where("movie_id = ? AND seat_number = ? AND show_time = ?",
-		input.MovieID, input.SeatNumber, input.ShowTime).First(&existingBooking).Error; err == nil {
+	if err := config.DB.Where(
+		"movie_id = ? AND seat_number = ? AND show_time = ? AND deleted_at IS NULL",
+		input.MovieID, input.SeatNumber, input.ShowTime,
+	).First(&existingBooking).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "Seat already booked for this showtime"})
 		return
 	}
@@ -55,8 +58,7 @@ func CreateBooking(c *gin.Context) {
 		return
 	}
 
-	config.DB.Preload("User").Preload("Movie").First(&booking, booking.ID)
-
+	config.DB.Preload("Movie").First(&booking, booking.ID)
 	c.JSON(http.StatusCreated, gin.H{"data": booking})
 }
 
@@ -68,7 +70,8 @@ func GetUserBookings(c *gin.Context) {
 	}
 
 	var bookings []models.Booking
-	if err := config.DB.Where("user_id = ?", userID).
+	if err := config.DB.
+		Where("user_id = ?", userID).
 		Preload("Movie").
 		Order("show_time desc").
 		Find(&bookings).Error; err != nil {
@@ -89,12 +92,12 @@ func GetBookingByID(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 
 	var booking models.Booking
-	if err := config.DB.Preload("User").Preload("Movie").First(&booking, uint(id)).Error; err != nil {
+	if err := config.DB.Preload("Movie").First(&booking, uint(id)).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Booking not found"})
 		return
 	}
 
-	if booking.UserID != userID {
+	if booking.UserID != userID.(uint) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "You are not authorized to view this booking"})
 		return
 	}
@@ -117,7 +120,7 @@ func CancelBooking(c *gin.Context) {
 		return
 	}
 
-	if booking.UserID != userID {
+	if booking.UserID != userID.(uint) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "You are not authorized to cancel this booking"})
 		return
 	}
@@ -150,7 +153,7 @@ func UpdateBooking(c *gin.Context) {
 		return
 	}
 
-	if booking.UserID != userID {
+	if booking.UserID != userID.(uint) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "You are not authorized to update this booking"})
 		return
 	}
@@ -167,9 +170,12 @@ func UpdateBooking(c *gin.Context) {
 	}
 
 	if input.SeatNumber != "" {
-		var existingBooking models.Booking
-		if err := config.DB.Where("movie_id = ? AND seat_number = ? AND show_time = ? AND id != ?",
-			booking.MovieID, input.SeatNumber, booking.ShowTime, booking.ID).First(&existingBooking).Error; err == nil {
+		// Check new seat not taken
+		var existing models.Booking
+		if err := config.DB.Where(
+			"movie_id = ? AND seat_number = ? AND show_time = ? AND id != ? AND deleted_at IS NULL",
+			booking.MovieID, input.SeatNumber, booking.ShowTime, booking.ID,
+		).First(&existing).Error; err == nil {
 			c.JSON(http.StatusConflict, gin.H{"error": "Seat already booked for this showtime"})
 			return
 		}
@@ -189,8 +195,7 @@ func UpdateBooking(c *gin.Context) {
 		return
 	}
 
-	config.DB.Preload("User").Preload("Movie").First(&booking, booking.ID)
-
+	config.DB.Preload("Movie").First(&booking, booking.ID)
 	c.JSON(http.StatusOK, gin.H{"data": booking})
 }
 
@@ -208,8 +213,8 @@ func GetMovieBookings(c *gin.Context) {
 	}
 
 	var bookings []models.Booking
-	if err := config.DB.Where("movie_id = ?", movieID).
-		Preload("User").
+	if err := config.DB.
+		Where("movie_id = ?", movieID).
 		Order("show_time asc").
 		Find(&bookings).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -234,7 +239,7 @@ func GetAvailableSeats(c *gin.Context) {
 
 	showTime, err := time.Parse(time.RFC3339, showTimeStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid show_time format. Use RFC3339 format"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid show_time format, use RFC3339 e.g. 2025-12-01T18:00:00Z"})
 		return
 	}
 
@@ -246,11 +251,12 @@ func GetAvailableSeats(c *gin.Context) {
 
 	var bookedSeats []string
 	config.DB.Model(&models.Booking{}).
-		Where("movie_id = ? AND show_time = ?", movieID, showTime).
+		Where("movie_id = ? AND show_time = ? AND deleted_at IS NULL", movieID, showTime).
 		Pluck("seat_number", &bookedSeats)
 
-	allSeats := []string{}
+	// Generate all seats A1-E10
 	rows := []string{"A", "B", "C", "D", "E"}
+	allSeats := make([]string, 0, 50)
 	for _, row := range rows {
 		for i := 1; i <= 10; i++ {
 			allSeats = append(allSeats, row+strconv.Itoa(i))
@@ -262,7 +268,7 @@ func GetAvailableSeats(c *gin.Context) {
 		bookedMap[seat] = true
 	}
 
-	availableSeats := []string{}
+	availableSeats := make([]string, 0)
 	for _, seat := range allSeats {
 		if !bookedMap[seat] {
 			availableSeats = append(availableSeats, seat)
